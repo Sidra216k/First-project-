@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Mar 27, 2026 at 03:01 PM
+-- Generation Time: Apr 29, 2026 at 12:01 PM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -60,6 +60,28 @@ INSERT INTO `activities` (`id`, `provider_id`, `name`, `city`, `price`, `duratio
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `admin_logs`
+--
+
+CREATE TABLE `admin_logs` (
+  `id` int(11) NOT NULL,
+  `admin_id` int(11) NOT NULL,
+  `action` varchar(50) NOT NULL,
+  `details` text DEFAULT NULL,
+  `ip_address` varchar(45) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `admin_logs`
+--
+
+INSERT INTO `admin_logs` (`id`, `admin_id`, `action`, `details`, `ip_address`, `created_at`) VALUES
+(1, 1, 'password_reset', 'تم استعادة كلمة المرور بنجاح', NULL, '2026-04-17 18:24:48');
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `ai_predictions`
 --
 
@@ -96,6 +118,7 @@ CREATE TABLE `bookings` (
   `booking_date` date DEFAULT NULL,
   `total_price` decimal(10,2) DEFAULT NULL,
   `status` enum('pending','confirmed','cancelled','completed') DEFAULT 'pending',
+  `icon` varchar(255) DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
@@ -103,15 +126,172 @@ CREATE TABLE `bookings` (
 -- Dumping data for table `bookings`
 --
 
-INSERT INTO `bookings` (`id`, `traveler_id`, `service_id`, `service_type`, `booking_date`, `total_price`, `status`, `created_at`) VALUES
-(1, 1, 1, 'hotel', '2026-05-10', 2500.00, 'confirmed', '2026-03-27 13:21:19'),
-(2, 1, 1, 'activity', '2026-05-11', 120.00, 'confirmed', '2026-03-27 13:21:19'),
-(3, 1, 1, 'restaurant', '2026-05-12', 180.00, 'pending', '2026-03-27 13:21:19'),
-(4, 1, 3, 'hotel', '2026-06-01', 1800.00, 'confirmed', '2026-03-27 13:21:19'),
-(5, 1, 3, 'activity', '2026-06-02', 95.00, 'pending', '2026-03-27 13:21:19'),
-(6, 1, 4, 'hotel', '2026-07-15', 950.00, 'confirmed', '2026-03-27 13:21:19'),
-(7, 1, 5, 'hotel', '2026-09-01', 2200.00, 'pending', '2026-03-27 13:21:19'),
-(8, 1, 6, 'hotel', '2026-12-20', 450.00, 'pending', '2026-03-27 13:21:19');
+INSERT INTO `bookings` (`id`, `traveler_id`, `service_id`, `service_type`, `booking_date`, `total_price`, `status`, `icon`, `created_at`) VALUES
+(1, 1, 1, 'hotel', '2026-05-10', 2500.00, 'confirmed', NULL, '2026-03-27 13:21:19'),
+(2, 1, 1, 'activity', '2026-05-11', 120.00, 'confirmed', NULL, '2026-03-27 13:21:19'),
+(3, 1, 1, 'restaurant', '2026-05-12', 180.00, 'completed', NULL, '2026-03-27 13:21:19'),
+(4, 1, 3, 'hotel', '2026-06-01', 1800.00, 'completed', NULL, '2026-03-27 13:21:19'),
+(5, 1, 3, 'activity', '2026-06-02', 95.00, 'completed', NULL, '2026-03-27 13:21:19'),
+(6, 1, 4, 'hotel', '2026-07-15', 950.00, 'completed', NULL, '2026-03-27 13:21:19'),
+(7, 1, 5, 'hotel', '2026-09-01', 2200.00, 'pending', NULL, '2026-03-27 13:21:19'),
+(8, 1, 6, 'hotel', '2026-12-20', 450.00, 'confirmed', NULL, '2026-03-27 13:21:19'),
+(11, 1, 8, 'activity', '2026-04-30', 150.00, 'cancelled', NULL, '2026-04-29 09:55:04'),
+(12, 1, 8, 'activity', '2026-05-01', 150.00, 'pending', NULL, '2026-04-29 09:55:33'),
+(13, 1, 5, 'hotel', '2026-04-30', 2200.00, 'pending', NULL, '2026-04-29 09:56:27');
+
+--
+-- Triggers `bookings`
+--
+DELIMITER $$
+CREATE TRIGGER `after_booking_insert` AFTER INSERT ON `bookings` FOR EACH ROW BEGIN
+    DECLARE traveler_name VARCHAR(100);
+    DECLARE service_name VARCHAR(100);
+    DECLARE action_link VARCHAR(255);
+    
+    -- جلب اسم المسافر
+    SELECT full_name INTO traveler_name FROM travelers WHERE id = NEW.traveler_id LIMIT 1;
+    
+    -- جلب اسم الخدمة حسب النوع
+    CASE NEW.service_type
+        WHEN 'hotel' THEN 
+            SELECT name INTO service_name FROM hotels WHERE id = NEW.service_id LIMIT 1;
+            SET action_link = CONCAT('/Service-Provider/bookings.php?action=view&id=', NEW.id);
+        WHEN 'restaurant' THEN 
+            SELECT name INTO service_name FROM restaurants WHERE id = NEW.service_id LIMIT 1;
+            SET action_link = CONCAT('/Service-Provider/bookings.php?action=view&id=', NEW.id);
+        WHEN 'activity' THEN 
+            SELECT name INTO service_name FROM activities WHERE id = NEW.service_id LIMIT 1;
+            SET action_link = CONCAT('/Service-Provider/bookings.php?action=view&id=', NEW.id);
+    END CASE;
+    
+    -- إنشاء الإشعار لمقدم الخدمة
+    INSERT INTO notifications (user_id, role, title, message, type, related_id, related_type, action_url, icon_class)
+    SELECT 
+        user_id, 
+        'provider',
+        '? حجز جديد',
+        CONCAT('حجز جديد من ', traveler_name, ' على خدمة: ', service_name),
+        'booking',
+        NEW.id,
+        'booking',
+        action_link,
+        'fa-calendar-plus'
+    FROM providers WHERE id = (
+        SELECT provider_id FROM hotels WHERE id = NEW.service_id AND NEW.service_type = 'hotel'
+        UNION SELECT provider_id FROM restaurants WHERE id = NEW.service_id AND NEW.service_type = 'restaurant'
+        UNION SELECT provider_id FROM activities WHERE id = NEW.service_id AND NEW.service_type = 'activity'
+        LIMIT 1
+    );
+END
+$$
+DELIMITER ;
+DELIMITER $$
+CREATE TRIGGER `after_booking_insert_provider` AFTER INSERT ON `bookings` FOR EACH ROW BEGIN
+    DECLARE provider_uid INT;
+    
+    -- جلب معرف المستخدم لمقدم الخدمة حسب نوع الخدمة
+    IF NEW.service_type = 'hotel' THEN
+        SELECT user_id INTO provider_uid FROM providers 
+        WHERE id = (SELECT provider_id FROM hotels WHERE id = NEW.service_id) LIMIT 1;
+    ELSEIF NEW.service_type = 'restaurant' THEN
+        SELECT user_id INTO provider_uid FROM providers 
+        WHERE id = (SELECT provider_id FROM restaurants WHERE id = NEW.service_id) LIMIT 1;
+    ELSEIF NEW.service_type = 'activity' THEN
+        SELECT user_id INTO provider_uid FROM providers 
+        WHERE id = (SELECT provider_id FROM activities WHERE id = NEW.service_id) LIMIT 1;
+    END IF;
+    
+    IF provider_uid IS NOT NULL THEN
+        INSERT INTO notifications (user_id, role, title, message, type, icon, related_type, related_id, action_url, priority)
+        VALUES (
+            provider_uid,
+            'provider',
+            '? حجز جديد!',
+            CONCAT('حجز جديد من مسافر على خدمتك بقيمة ', NEW.total_price, ' $'),
+            'booking',
+            'fa-shopping-cart',
+            'booking',
+            NEW.id,
+            'Service-Provider/bookings.php?action=view&id=' || NEW.id,
+            'high'
+        );
+    END IF;
+END
+$$
+DELIMITER ;
+DELIMITER $$
+CREATE TRIGGER `after_booking_insert_traveler` AFTER INSERT ON `bookings` FOR EACH ROW BEGIN
+    -- إشعار للمسافر
+    INSERT INTO notifications (user_id, role, title, message, type, icon, related_type, related_id, action_url, priority)
+    SELECT 
+        t.user_id,
+        'traveler',
+        'تم استلام طلب حجزك ?',
+        CONCAT('تم استلام طلب حجزك لـ: ', 
+            CASE 
+                WHEN NEW.service_type = 'hotel' THEN (SELECT name FROM hotels WHERE id = NEW.service_id)
+                WHEN NEW.service_type = 'restaurant' THEN (SELECT name FROM restaurants WHERE id = NEW.service_id)
+                WHEN NEW.service_type = 'activity' THEN (SELECT name FROM activities WHERE id = NEW.service_id)
+            END,
+            ' بتاريخ ', DATE_FORMAT(NEW.booking_date, '%Y-%m-%d')
+        ),
+        'booking',
+        'fa-calendar-check',
+        'booking',
+        NEW.id,
+        CONCAT('Traveler/trip_details.php?id=', 
+            (SELECT id FROM trips WHERE traveler_id = NEW.traveler_id ORDER BY created_at DESC LIMIT 1)
+        ),
+        'high'
+    FROM travelers t WHERE t.id = NEW.traveler_id;
+END
+$$
+DELIMITER ;
+DELIMITER $$
+CREATE TRIGGER `after_booking_update` AFTER UPDATE ON `bookings` FOR EACH ROW BEGIN
+    IF NEW.status != OLD.status THEN
+        -- إشعار للمسافر بتحديث الحالة
+        INSERT INTO notifications (user_id, role, title, message, type, icon, related_type, related_id, is_read, action_url, priority)
+        SELECT 
+            t.user_id,
+            'traveler',
+            CASE NEW.status
+                WHEN 'confirmed' THEN '✅ تم تأكيد حجزك'
+                WHEN 'cancelled' THEN '❌ تم إلغاء الحجز'
+                WHEN 'completed' THEN '? اكتملت رحلتك'
+                ELSE '? تحديث حالة الحجز'
+            END,
+            CONCAT('تم تغيير حالة حجزك لـ: ', 
+                CASE 
+                    WHEN NEW.service_type = 'hotel' THEN (SELECT name FROM hotels WHERE id = NEW.service_id)
+                    WHEN NEW.service_type = 'restaurant' THEN (SELECT name FROM restaurants WHERE id = NEW.service_id)
+                    WHEN NEW.service_type = 'activity' THEN (SELECT name FROM activities WHERE id = NEW.service_id)
+                END,
+                ' إلى: ', 
+                CASE NEW.status
+                    WHEN 'confirmed' THEN 'مؤكد'
+                    WHEN 'cancelled' THEN 'ملغي'
+                    WHEN 'completed' THEN 'مكتمل'
+                    ELSE NEW.status
+                END
+            ),
+            'booking',
+            CASE NEW.status
+                WHEN 'confirmed' THEN 'fa-check-circle'
+                WHEN 'cancelled' THEN 'fa-times-circle'
+                WHEN 'completed' THEN 'fa-flag-checkered'
+                ELSE 'fa-info-circle'
+            END,
+            'booking',
+            NEW.id,
+            0,
+            'Traveler/my_bookings.php',
+            CASE WHEN NEW.status IN ('confirmed','cancelled') THEN 'high' ELSE 'medium' END
+        FROM travelers t WHERE t.id = NEW.traveler_id;
+    END IF;
+END
+$$
+DELIMITER ;
 
 -- --------------------------------------------------------
 
@@ -166,7 +346,7 @@ CREATE TABLE `hotels` (
 
 INSERT INTO `hotels` (`id`, `provider_id`, `name`, `city`, `category`, `price_per_night`, `rating`, `description`, `image_url`, `created_at`, `updated_at`) VALUES
 (1, 1, 'برج العرب دبي', 'دبي', 'medium', 2500.00, 5.0, 'أيقونة دبي الفاخرة على شكل شراع', 'uploads/hotels/hotel_e1fbc8e829503166_1774618002.jpg', '2026-03-27 13:21:19', '2026-03-27 13:26:42'),
-(2, 1, 'أتلانتس النخلة', 'دبي', 'medium', 1200.00, 4.9, 'منتجع خيالي على جزيرة النخلة', 'uploads/hotels/hotel_a6c0c15fe48601eb_1774617988.jpg', '2026-03-27 13:21:19', '2026-03-27 13:26:28'),
+(2, 1, 'أتلانتس النخلة', 'دبي', 'medium', 13000.00, 4.9, 'منتجع خيالي على جزيرة النخلة', 'uploads/hotels/hotel_a6c0c15fe48601eb_1774617988.jpg', '2026-03-27 13:21:19', '2026-04-29 09:23:51'),
 (3, 3, 'فندق ريتز باريس', 'باريس', 'luxury', 1800.00, 5.0, 'الفخامة الفرنسية الأصيلة', 'uploads/hotels/hotel_69c684f543229_1774617845.jpg', '2026-03-27 13:21:19', '2026-03-27 13:24:05'),
 (4, 5, 'فندق فور سيزنز البوسفور', 'إسطنبول', 'luxury', 950.00, 4.9, 'قصر عثماني مُرمم على ضفاف البوسفور', 'uploads/hotels/hotel_69c684f02a621_1774617840.jpg', '2026-03-27 13:21:19', '2026-03-27 13:24:00'),
 (5, 8, 'فندق أمان طوكيو', 'طوكيو', 'luxury', 2200.00, 5.0, 'واحة من الهدوء في قلب المدينة', 'uploads/hotels/hotel_69c684ebd87b7_1774617835.jpg', '2026-03-27 13:21:19', '2026-03-27 13:23:55'),
@@ -175,16 +355,52 @@ INSERT INTO `hotels` (`id`, `provider_id`, `name`, `city`, `category`, `price_pe
 -- --------------------------------------------------------
 
 --
--- Table structure for table `price_history`
+-- Table structure for table `notifications`
 --
 
-CREATE TABLE `price_history` (
+CREATE TABLE `notifications` (
   `id` int(11) NOT NULL,
-  `service_id` int(11) DEFAULT NULL,
-  `service_type` enum('hotel','restaurant','activity') DEFAULT NULL,
-  `recorded_price` decimal(10,2) DEFAULT NULL,
-  `recorded_date` date DEFAULT curdate()
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+  `user_id` int(11) NOT NULL COMMENT 'معرف المستخدم المستلم',
+  `role` enum('admin','provider','traveler') NOT NULL COMMENT 'دور المستخدم',
+  `title` varchar(150) NOT NULL COMMENT 'عنوان الإشعار',
+  `message` text NOT NULL COMMENT 'نص الإشعار',
+  `type` enum('booking','system','promotion','review','alert') DEFAULT 'system' COMMENT 'نوع الإشعار',
+  `icon` varchar(100) DEFAULT NULL,
+  `is_read` tinyint(1) DEFAULT 0 COMMENT '0=غير مقروء، 1=مقروء',
+  `related_id` int(11) DEFAULT NULL COMMENT 'معرف العنصر المرتبط (حجز، خدمة، إلخ)',
+  `related_type` enum('booking','hotel','restaurant','activity','trip','review') DEFAULT NULL COMMENT 'نوع العنصر المرتبط',
+  `action_url` varchar(255) DEFAULT NULL COMMENT 'رابط الإجراء عند النقر',
+  `priority` enum('low','medium','high') DEFAULT 'medium',
+  `icon_class` varchar(50) DEFAULT 'fa-bell' COMMENT 'أيقونة العرض',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `read_at` timestamp NULL DEFAULT NULL COMMENT 'وقت القراءة'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='نظام الإشعارات المركزي';
+
+--
+-- Dumping data for table `notifications`
+--
+
+INSERT INTO `notifications` (`id`, `user_id`, `role`, `title`, `message`, `type`, `icon`, `is_read`, `related_id`, `related_type`, `action_url`, `priority`, `icon_class`, `created_at`, `read_at`) VALUES
+(1, 2, 'traveler', 'تم تأكيد حجزك ✈️', 'تم تأكيد حجزك في برج العرب دبي للفترة 10-15 مايو 2026', 'booking', NULL, 1, 1, 'booking', '/Traveler/trip_details.php?id=1', 'medium', 'fa-check-circle', '2026-04-22 17:57:49', '2026-04-22 18:28:41'),
+(2, 2, 'traveler', 'تذكير برحلتك القادمة 🗓️', 'رحلتك إلى باريس تبدأ خلال 3 أيام. تأكد من تجهيز مستنداتك', 'alert', NULL, 1, 2, 'trip', '/Traveler/my_itinerary.php', 'medium', 'fa-calendar-alert', '2026-04-22 17:57:49', '2026-04-22 18:28:41'),
+(3, 2, 'traveler', 'عرض خاص لك 🎁', 'احصل على خصم 15% على حجوزات إسطنبول عند الحجز خلال 48 ساعة', 'promotion', NULL, 1, NULL, NULL, '/Traveler/search.php?city=إسطنبول', 'medium', 'fa-gift', '2026-04-22 17:57:49', NULL),
+(4, 2, 'traveler', 'تمت إضافة تقييم جديد ⭐', 'تم تقييم رحلتك إلى دبي بـ 5 نجوم. شكراً لثقتك!', 'review', NULL, 1, 1, 'booking', '/Traveler/reviews.php', 'medium', 'fa-star', '2026-04-22 17:57:49', NULL),
+(5, 2, 'traveler', 'تحديث حالة الحجز 🔄', 'تم تحديث حالة حجز مطعم لو جوردان إلى \"مؤكد\"', 'booking', NULL, 1, 3, 'booking', '/Traveler/my_bookings.php', 'medium', 'fa-clock', '2026-04-22 17:57:49', '2026-04-22 18:28:41'),
+(6, 2, 'traveler', '✅ تم تأكيد حجزك', 'تم تغيير حالة حجزك لـ: فندق فور سيزنز النيل إلى: مؤكد', 'booking', 'fa-check-circle', 1, 8, 'booking', 'Traveler/my_bookings.php', 'high', 'fa-bell', '2026-04-29 09:54:03', '2026-04-29 09:54:50'),
+(7, 2, 'traveler', 'تم استلام طلب حجزك 📋', 'تم استلام طلب حجزك لـ: تجربة السوشي مع شيف محترف بتاريخ 2026-04-30', 'booking', 'fa-calendar-check', 1, 11, 'booking', 'Traveler/trip_details.php?id=5', 'high', 'fa-bell', '2026-04-29 09:55:04', '2026-04-29 09:57:03'),
+(8, 5, 'provider', '🔔 حجز جديد!', 'حجز جديد من مسافر على خدمتك بقيمة 150.00 $', 'booking', 'fa-shopping-cart', 0, 11, 'booking', '1', 'high', 'fa-bell', '2026-04-29 09:55:04', NULL),
+(9, 5, 'provider', '🔔 حجز جديد', 'حجز جديد من سيدرة كرزون على خدمة: تجربة السوشي مع شيف محترف', 'booking', NULL, 0, 11, 'booking', '/Service-Provider/bookings.php?action=view&id=11', 'medium', 'fa-calendar-plus', '2026-04-29 09:55:04', NULL),
+(10, 2, 'traveler', 'تم استلام طلب حجزك 📋', 'تم استلام طلب حجزك لـ: تجربة السوشي مع شيف محترف بتاريخ 2026-05-01', 'booking', 'fa-calendar-check', 1, 12, 'booking', 'Traveler/trip_details.php?id=5', 'high', 'fa-bell', '2026-04-29 09:55:33', '2026-04-29 09:57:03'),
+(11, 5, 'provider', '🔔 حجز جديد!', 'حجز جديد من مسافر على خدمتك بقيمة 150.00 $', 'booking', 'fa-shopping-cart', 0, 12, 'booking', '1', 'high', 'fa-bell', '2026-04-29 09:55:33', NULL),
+(12, 5, 'provider', '🔔 حجز جديد', 'حجز جديد من سيدرة كرزون على خدمة: تجربة السوشي مع شيف محترف', 'booking', NULL, 0, 12, 'booking', '/Service-Provider/bookings.php?action=view&id=12', 'medium', 'fa-calendar-plus', '2026-04-29 09:55:33', NULL),
+(13, 2, 'traveler', '❌ تم إلغاء الحجز', 'تم تغيير حالة حجزك لـ: تجربة السوشي مع شيف محترف إلى: ملغي', 'booking', 'fa-times-circle', 1, 11, 'booking', 'Traveler/my_bookings.php', 'high', 'fa-bell', '2026-04-29 09:56:11', '2026-04-29 09:57:03'),
+(14, 2, 'traveler', 'تم استلام طلب حجزك 📋', 'تم استلام طلب حجزك لـ: فندق أمان طوكيو بتاريخ 2026-04-30', 'booking', 'fa-calendar-check', 1, 13, 'booking', 'Traveler/trip_details.php?id=5', 'high', 'fa-bell', '2026-04-29 09:56:27', '2026-04-29 09:57:03'),
+(15, 6, 'provider', '🔔 حجز جديد!', 'حجز جديد من مسافر على خدمتك بقيمة 2200.00 $', 'booking', 'fa-shopping-cart', 0, 13, 'booking', '1', 'high', 'fa-bell', '2026-04-29 09:56:27', NULL),
+(16, 6, 'provider', '🔔 حجز جديد', 'حجز جديد من سيدرة كرزون على خدمة: فندق أمان طوكيو', 'booking', NULL, 0, 13, 'booking', '/Service-Provider/bookings.php?action=view&id=13', 'medium', 'fa-calendar-plus', '2026-04-29 09:56:27', NULL),
+(17, 2, 'traveler', '✅ تم تأكيد حجزك', 'تم تغيير حالة حجزك لـ: جولة خاصة في متحف اللوفر إلى: مؤكد', 'booking', 'fa-check-circle', 0, 5, 'booking', 'Traveler/my_bookings.php', 'high', 'fa-bell', '2026-04-29 09:57:53', NULL),
+(18, 2, 'traveler', '🎉 اكتملت رحلتك', 'تم تغيير حالة حجزك لـ: جولة خاصة في متحف اللوفر إلى: مكتمل', 'booking', 'fa-flag-checkered', 0, 5, 'booking', 'Traveler/my_bookings.php', 'medium', 'fa-bell', '2026-04-29 09:58:11', NULL),
+(19, 2, 'traveler', '🎉 اكتملت رحلتك', 'تم تغيير حالة حجزك لـ: فندق فور سيزنز البوسفور إلى: مكتمل', 'booking', 'fa-flag-checkered', 0, 6, 'booking', 'Traveler/my_bookings.php', 'medium', 'fa-bell', '2026-04-29 09:58:12', NULL),
+(20, 2, 'traveler', '🎉 اكتملت رحلتك', 'تم تغيير حالة حجزك لـ: فندق ريتز باريس إلى: مكتمل', 'booking', 'fa-flag-checkered', 0, 4, 'booking', 'Traveler/my_bookings.php', 'medium', 'fa-bell', '2026-04-29 09:58:13', NULL);
 
 -- --------------------------------------------------------
 
@@ -206,7 +422,7 @@ CREATE TABLE `providers` (
 
 INSERT INTO `providers` (`id`, `user_id`, `business_name`, `business_type`, `is_verified`) VALUES
 (1, 3, 'فنادق دبي الفاخرة', 'hotel', 1),
-(2, 3, 'منتجعات الشاطئ الذهبي', 'hotel', 1),
+(2, 3, 'فنادق دبي الفاخرة', 'hotel', 1),
 (3, 4, 'مطاعم باريس الأصيلة', 'restaurant', 1),
 (4, 4, 'مقاهي مونمارتر', 'restaurant', 1),
 (5, 5, 'جولات إسطنبول التاريخية', 'activity', 1),
@@ -246,7 +462,8 @@ INSERT INTO `restaurants` (`id`, `provider_id`, `name`, `city`, `cuisine_type`, 
 (3, 5, 'مطعم 360 إسطنبول', 'إسطنبول', 'عربي', 55.00, 4.8, 'uploads/restaurants/restaurant_eae9105c4b0e62ff_1774619181.jpg', 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=800&q=80', '2026-03-27 13:21:19', '2026-03-27 13:46:21'),
 (4, 5, 'مطعم حمدى', 'إسطنبول', 'عربي', 25.00, 4.9, 'uploads/restaurants/restaurant_3df1855379602d9c_1774619166.jpg', 'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?auto=format&fit=crop&w=800&q=80', '2026-03-27 13:21:19', '2026-03-27 13:46:06'),
 (5, 6, 'سوكياباشي جيرو', 'طوكيو', 'سوشي', 300.00, 5.0, 'uploads/restaurants/restaurant_3df1855379602d9c_1774619166.jpg', 'https://images.unsplash.com/photo-1579871494447-9811cf80d66c?auto=format&fit=crop&w=800&q=80', '2026-03-27 13:21:19', '2026-03-27 13:52:34'),
-(6, 10, 'مطعم أبو طارق', 'القاهرة', 'مصري', 12.00, 4.7, 'uploads/restaurants/restaurant_3df1855379602d9c_1774619166.jpg', 'https://images.unsplash.com/photo-1563379926898-0c02c7e7c0f8?auto=format&fit=crop&w=800&q=80', '2026-03-27 13:21:19', '2026-03-27 13:52:32');
+(6, 10, 'مطعم أبو طارق', 'القاهرة', 'مصري', 12.00, 4.7, 'uploads/restaurants/restaurant_3df1855379602d9c_1774619166.jpg', 'https://images.unsplash.com/photo-1563379926898-0c02c7e7c0f8?auto=format&fit=crop&w=800&q=80', '2026-03-27 13:21:19', '2026-03-27 13:52:32'),
+(7, 1, ';laasld;kasd', 'asdklasd asdaskjdasd ', 'عربي', 12000.00, 3.0, 'uploads/restaurants/restaurant_2d1485dfd1af3ad8_1777454697.png', 'efmea.fad asd', '2026-04-29 09:24:57', '2026-04-29 09:24:57');
 
 -- --------------------------------------------------------
 
@@ -278,62 +495,6 @@ INSERT INTO `reviews` (`id`, `user_id`, `service_id`, `service_type`, `rating`, 
 -- --------------------------------------------------------
 
 --
--- Table structure for table `rooms`
---
-
-CREATE TABLE `rooms` (
-  `id` int(11) NOT NULL,
-  `hotel_id` int(11) DEFAULT NULL,
-  `room_type` varchar(50) DEFAULT NULL,
-  `price` decimal(10,2) DEFAULT NULL,
-  `available_count` int(11) DEFAULT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
---
--- Dumping data for table `rooms`
---
-
-INSERT INTO `rooms` (`id`, `hotel_id`, `room_type`, `price`, `available_count`) VALUES
-(1, 1, 'جناح بانورامي', 3500.00, 2),
-(2, 1, 'جناح ملكي', 8000.00, 1),
-(3, 2, 'غرفة ديلوكس بحرية', 1400.00, 5),
-(4, 3, 'جناح كوكو شانيل', 4500.00, 1),
-(5, 4, 'جناح البوسفور', 1800.00, 2),
-(6, 5, 'جناح طوكيو', 4000.00, 1),
-(7, 6, 'جناح النيل الملكي', 900.00, 2);
-
--- --------------------------------------------------------
-
---
--- Table structure for table `system_settings`
---
-
-CREATE TABLE `system_settings` (
-  `id` int(11) NOT NULL,
-  `setting_key` varchar(100) NOT NULL,
-  `setting_value` text DEFAULT NULL,
-  `setting_type` enum('string','number','boolean','json') DEFAULT 'string',
-  `description` varchar(255) DEFAULT NULL,
-  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
---
--- Dumping data for table `system_settings`
---
-
-INSERT INTO `system_settings` (`id`, `setting_key`, `setting_value`, `setting_type`, `description`, `updated_at`) VALUES
-(1, 'site_name', 'TravelPlanner', 'string', 'اسم الموقع الرسمي', '2026-03-27 13:21:20'),
-(2, 'commission_rate', '12', 'number', 'نسبة عمولة المنصة (%)', '2026-03-27 13:21:20'),
-(3, 'min_budget', '500', 'number', 'أدنى ميزانية مسموحة ($)', '2026-03-27 13:21:20'),
-(4, 'max_budget', '100000', 'number', 'أقصى ميزانية مسموحة ($)', '2026-03-27 13:21:20'),
-(5, 'ai_enabled', 'true', 'boolean', 'تفعيل ميزات الذكاء الاصطناعي', '2026-03-27 13:21:20'),
-(6, 'maintenance_mode', 'false', 'boolean', 'وضع الصيانة', '2026-03-27 13:21:20'),
-(7, 'default_currency', 'USD', 'string', 'العملة الافتراضية', '2026-03-27 13:21:20'),
-(8, 'loyalty_points_per_dollar', '1', 'number', 'نقاط الولاء لكل دولار', '2026-03-27 13:21:20');
-
--- --------------------------------------------------------
-
---
 -- Table structure for table `travelers`
 --
 
@@ -350,8 +511,9 @@ CREATE TABLE `travelers` (
 --
 
 INSERT INTO `travelers` (`id`, `user_id`, `full_name`, `phone`, `loyalty_points`) VALUES
-(1, 2, 'سيدرة كرزون', '+963912345678', 2500),
-(2, 5, 'لارا', '', 0);
+(1, 2, 'سيدرة كرزون', '+963912345678', 2750),
+(2, 5, 'لارا', '', 0),
+(3, 8, 'ahmad', '0956534565', 0);
 
 -- --------------------------------------------------------
 
@@ -380,7 +542,8 @@ INSERT INTO `trips` (`id`, `traveler_id`, `destination`, `total_budget`, `start_
 (2, 1, 'باريس - مدينة الحب', 8000.00, '2026-06-01', '2026-06-07', '[{\"type\":\"hotel\",\"id\":3,\"name\":\"فندق ريتز باريس\",\"price\":1800},{\"type\":\"activity\",\"id\":3,\"name\":\"جولة خاصة في متحف اللوفر\",\"price\":95},{\"type\":\"restaurant\",\"id\":1,\"name\":\"لو جوردان\",\"price\":180}]', '2026-03-27 13:21:20', '2026-03-27 13:21:20'),
 (3, 1, 'إسطنبول - جسر الحضارات', 5000.00, '2026-07-15', '2026-07-21', '[{\"type\":\"hotel\",\"id\":4,\"name\":\"فندق فور سيزنز البوسفور\",\"price\":950},{\"type\":\"activity\",\"id\":5,\"name\":\"جولة البوسفور بالقارب\",\"price\":45},{\"type\":\"restaurant\",\"id\":3,\"name\":\"مطعم 360 إسطنبول\",\"price\":55}]', '2026-03-27 13:21:20', '2026-03-27 13:21:20'),
 (4, 1, 'طوكيو - بين التقليد والحداثة', 12000.00, '2026-09-01', '2026-09-10', '[{\"type\":\"hotel\",\"id\":5,\"name\":\"فندق أمان طوكيو\",\"price\":2200},{\"type\":\"activity\",\"id\":7,\"name\":\"جولة معابد طوكيو القديمة\",\"price\":85},{\"type\":\"restaurant\",\"id\":5,\"name\":\"سوكياباشي جيرو\",\"price\":300}]', '2026-03-27 13:21:20', '2026-03-27 13:21:20'),
-(5, 1, 'القاهرة - أم الدنيا', 3000.00, '2026-12-20', '2026-12-27', '[{\"type\":\"hotel\",\"id\":6,\"name\":\"فندق فور سيزنز النيل\",\"price\":450},{\"type\":\"activity\",\"id\":9,\"name\":\"جولة الأهرامات وأبو الهول\",\"price\":65},{\"type\":\"restaurant\",\"id\":6,\"name\":\"مطعم أبو طارق\",\"price\":12}]', '2026-03-27 13:21:20', '2026-03-27 13:21:20');
+(5, 1, 'القاهرة - أم الدنيا', 3000.00, '2026-12-20', '2026-12-27', '[{\"type\":\"hotel\",\"id\":6,\"name\":\"فندق فور سيزنز النيل\",\"price\":450},{\"type\":\"activity\",\"id\":9,\"name\":\"جولة الأهرامات وأبو الهول\",\"price\":65},{\"type\":\"restaurant\",\"id\":6,\"name\":\"مطعم أبو طارق\",\"price\":12}]', '2026-03-27 13:21:20', '2026-03-27 13:21:20'),
+(6, 1, 'شسيص شسيsdf', 3333.00, '2026-05-01', '2026-05-02', '[{\"type\":\"hotel\",\"id\":1,\"name\":\"برج العرب دبي\",\"price\":2500},{\"type\":\"restaurant\",\"id\":1,\"name\":\"لو جوردان\",\"price\":180},{\"type\":\"activity\",\"id\":1,\"name\":\"رحلة صحراوية مع عشاء بدوي\",\"price\":120}]', '2026-04-29 09:56:50', '2026-04-29 09:56:50');
 
 -- --------------------------------------------------------
 
@@ -392,6 +555,7 @@ CREATE TABLE `users` (
   `id` int(11) NOT NULL,
   `username` varchar(50) NOT NULL,
   `email` varchar(100) NOT NULL,
+  `phone` varchar(20) DEFAULT NULL,
   `password` varchar(255) NOT NULL,
   `role` enum('admin','provider','traveler') NOT NULL,
   `status` enum('active','blocked') DEFAULT 'active',
@@ -402,14 +566,15 @@ CREATE TABLE `users` (
 -- Dumping data for table `users`
 --
 
-INSERT INTO `users` (`id`, `username`, `email`, `password`, `role`, `status`, `created_at`) VALUES
-(1, 'admin_sidra', 'sidraa@gmail.com', '1111', 'admin', 'active', '2026-03-27 13:21:19'),
-(2, 'sidra_traveler', 'sidrat@gmail.com', '1111', 'traveler', 'active', '2026-03-27 13:21:19'),
-(3, 'dubai_hotels', 'sidrap@gmail.com', '1111', 'provider', 'active', '2026-03-27 13:21:19'),
-(4, 'paris_restaurants', 'sidrap2@gmail.com', '1111', 'provider', 'active', '2026-03-27 13:21:19'),
-(5, 'istanbul_activities', 'sidrap3@gmail.com', '1111', 'provider', 'active', '2026-03-27 13:21:19'),
-(6, 'tokyo_services', 'sidrap4@gmail.com', '1111', 'provider', 'active', '2026-03-27 13:21:19'),
-(7, 'cairo_provider', 'sidrap5@gmail.com', '1111', 'provider', 'active', '2026-03-27 13:21:19');
+INSERT INTO `users` (`id`, `username`, `email`, `phone`, `password`, `role`, `status`, `created_at`) VALUES
+(1, 'admin_sidra', 'sidraa@gmail.com', '0987654321', '111111', 'admin', 'active', '2026-03-27 13:21:19'),
+(2, 'sidra_traveler', 'sidrat@gmail.com', '0987654322', '111111', 'traveler', 'active', '2026-03-27 13:21:19'),
+(3, 'dubai_hotelsa', 'sidrap@gmail.com', '0987654323', '111111', 'provider', 'active', '2026-03-27 13:21:19'),
+(4, 'paris_restaurants', 'sidrap2@gmail.com', '0987654324', '111111', 'provider', 'active', '2026-03-27 13:21:19'),
+(5, 'istanbul_activities', 'sidrap3@gmail.com', '0987654325', '111111', 'provider', 'active', '2026-03-27 13:21:19'),
+(6, 'tokyo_services', 'sidrap4@gmail.com', '0987654326', '111111', 'provider', 'active', '2026-03-27 13:21:19'),
+(7, 'cairo_provider', 'sidrap5@gmail.com', '0987654327', '111111', 'provider', 'active', '2026-03-27 13:21:19'),
+(8, 'ahmad123', 'ahmad@gmail.com', NULL, '111111@@AA', 'traveler', 'active', '2026-04-29 09:13:24');
 
 --
 -- Indexes for dumped tables
@@ -421,6 +586,13 @@ INSERT INTO `users` (`id`, `username`, `email`, `password`, `role`, `status`, `c
 ALTER TABLE `activities`
   ADD PRIMARY KEY (`id`),
   ADD KEY `provider_id` (`provider_id`);
+
+--
+-- Indexes for table `admin_logs`
+--
+ALTER TABLE `admin_logs`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `admin_id` (`admin_id`);
 
 --
 -- Indexes for table `ai_predictions`
@@ -449,10 +621,13 @@ ALTER TABLE `hotels`
   ADD KEY `provider_id` (`provider_id`);
 
 --
--- Indexes for table `price_history`
+-- Indexes for table `notifications`
 --
-ALTER TABLE `price_history`
-  ADD PRIMARY KEY (`id`);
+ALTER TABLE `notifications`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_user_role` (`user_id`,`role`),
+  ADD KEY `idx_created` (`created_at`),
+  ADD KEY `idx_is_read` (`is_read`);
 
 --
 -- Indexes for table `providers`
@@ -474,20 +649,6 @@ ALTER TABLE `restaurants`
 ALTER TABLE `reviews`
   ADD PRIMARY KEY (`id`),
   ADD KEY `user_id` (`user_id`);
-
---
--- Indexes for table `rooms`
---
-ALTER TABLE `rooms`
-  ADD PRIMARY KEY (`id`),
-  ADD KEY `hotel_id` (`hotel_id`);
-
---
--- Indexes for table `system_settings`
---
-ALTER TABLE `system_settings`
-  ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `setting_key` (`setting_key`);
 
 --
 -- Indexes for table `travelers`
@@ -522,6 +683,12 @@ ALTER TABLE `activities`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=11;
 
 --
+-- AUTO_INCREMENT for table `admin_logs`
+--
+ALTER TABLE `admin_logs`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+
+--
 -- AUTO_INCREMENT for table `ai_predictions`
 --
 ALTER TABLE `ai_predictions`
@@ -531,7 +698,7 @@ ALTER TABLE `ai_predictions`
 -- AUTO_INCREMENT for table `bookings`
 --
 ALTER TABLE `bookings`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=9;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=14;
 
 --
 -- AUTO_INCREMENT for table `destinations`
@@ -546,10 +713,10 @@ ALTER TABLE `hotels`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
 
 --
--- AUTO_INCREMENT for table `price_history`
+-- AUTO_INCREMENT for table `notifications`
 --
-ALTER TABLE `price_history`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+ALTER TABLE `notifications`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=21;
 
 --
 -- AUTO_INCREMENT for table `providers`
@@ -561,7 +728,7 @@ ALTER TABLE `providers`
 -- AUTO_INCREMENT for table `restaurants`
 --
 ALTER TABLE `restaurants`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
 
 --
 -- AUTO_INCREMENT for table `reviews`
@@ -570,34 +737,22 @@ ALTER TABLE `reviews`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
 
 --
--- AUTO_INCREMENT for table `rooms`
---
-ALTER TABLE `rooms`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
-
---
--- AUTO_INCREMENT for table `system_settings`
---
-ALTER TABLE `system_settings`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=9;
-
---
 -- AUTO_INCREMENT for table `travelers`
 --
 ALTER TABLE `travelers`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
 
 --
 -- AUTO_INCREMENT for table `trips`
 --
 ALTER TABLE `trips`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
 
 --
 -- AUTO_INCREMENT for table `users`
 --
 ALTER TABLE `users`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=9;
 
 --
 -- Constraints for dumped tables
@@ -610,6 +765,12 @@ ALTER TABLE `activities`
   ADD CONSTRAINT `activities_ibfk_1` FOREIGN KEY (`provider_id`) REFERENCES `providers` (`id`) ON DELETE CASCADE;
 
 --
+-- Constraints for table `admin_logs`
+--
+ALTER TABLE `admin_logs`
+  ADD CONSTRAINT `admin_logs_ibfk_1` FOREIGN KEY (`admin_id`) REFERENCES `users` (`id`) ON DELETE CASCADE;
+
+--
 -- Constraints for table `bookings`
 --
 ALTER TABLE `bookings`
@@ -620,6 +781,12 @@ ALTER TABLE `bookings`
 --
 ALTER TABLE `hotels`
   ADD CONSTRAINT `hotels_ibfk_1` FOREIGN KEY (`provider_id`) REFERENCES `providers` (`id`) ON DELETE CASCADE;
+
+--
+-- Constraints for table `notifications`
+--
+ALTER TABLE `notifications`
+  ADD CONSTRAINT `fk_notifications_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE;
 
 --
 -- Constraints for table `providers`
@@ -638,12 +805,6 @@ ALTER TABLE `restaurants`
 --
 ALTER TABLE `reviews`
   ADD CONSTRAINT `reviews_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE;
-
---
--- Constraints for table `rooms`
---
-ALTER TABLE `rooms`
-  ADD CONSTRAINT `rooms_ibfk_1` FOREIGN KEY (`hotel_id`) REFERENCES `hotels` (`id`) ON DELETE CASCADE;
 
 --
 -- Constraints for table `travelers`
